@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "This is a hacky place to practice CRDT and sync techniques for TinyBase v3",
   "scripts": {
-    "compile": "npx esbuild --bundle --outdir=lib ./src/index.js",
+    "compile": "npx esbuild --bundle --platform=node  --format=esm --outdir=lib --external:tinybase ./src/index.js",
     "start": "npm run compile && node ./lib/index.js"
   },
+  "type": "module",
   "repository": "github:tinyplex/tinysync",
   "author": "jamesgpearce",
   "license": "MIT",
