@@ -1,9 +1,9 @@
 import {CellOrUndefined, Store} from 'tinybase/store';
 import {Id} from 'tinybase/common';
-import {getTime} from './clock';
+import {getHlcFunction} from './clock';
 
 export type CellChange = [
-  time: number,
+  hlc: string,
   tableId: Id,
   rowId: Id,
   cellId: Id,
@@ -11,15 +11,17 @@ export type CellChange = [
 ];
 export type CellChanges = CellChange[];
 
-export const createSync = (store: Store) => {
+export const createSync = (store: Store, uniqueStoreId: Id) => {
   const cellChanges: CellChange[] = [];
+
+  const getHlc = getHlcFunction(uniqueStoreId);
   const cellChanged = (
     _store,
     tableId: Id,
     rowId: Id,
     cellId: Id,
     newCell: CellOrUndefined,
-  ) => cellChanges.push([getTime(), tableId, rowId, cellId, newCell]);
+  ) => cellChanges.push([getHlc(), tableId, rowId, cellId, newCell]);
 
   store.addCellListener(null, null, null, cellChanged);
   const sync = {
