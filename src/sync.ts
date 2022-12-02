@@ -1,6 +1,6 @@
 import {CellOrUndefined, Store} from 'tinybase/store';
 import {Id} from 'tinybase/common';
-import {getHlcFunction} from './clock';
+import {getHlcFunction} from './hlc';
 
 export type CellChange = [
   hlc: string,

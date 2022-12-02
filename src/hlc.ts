@@ -1,6 +1,6 @@
 import {Id} from 'tinybase/common';
 
-export const getHlcFunction = (clockId: Id) => {
+export const getHlcFunction = (uniqueId: Id) => {
   let logicalTime = 0;
   let counter = 0;
 
@@ -19,7 +19,7 @@ export const getHlcFunction = (clockId: Id) => {
         : logicalTime == remoteLogicalTime
         ? remoteCounter
         : -1;
-    return [logicalTime, ++counter, clockId].join(',');
+    return [logicalTime, (++counter + '').padStart(4, '0'), uniqueId].join(',');
   };
 
   getHlc();
