@@ -4,6 +4,7 @@
     "CRDT",
     "cujo",
     "esbuild",
+    "HLCs",
     "jamesgpearce",
     "linebreak",
     "outdir",
