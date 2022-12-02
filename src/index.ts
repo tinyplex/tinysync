@@ -3,8 +3,17 @@ import {createStore} from 'tinybase/store';
 import {createSync} from './sync';
 
 const syncFromTo = (syncFrom: any, syncTo: any) => {
-  console.log('\nsync from/to', syncFrom.uniqueStoreId, syncTo.uniqueStoreId);
-  syncTo.receiveChangeMessages(syncFrom.sendChangeMessages());
+  console.log(
+    '\nsync from/to',
+    syncFrom.getUniqueStoreId(),
+    syncTo.getUniqueStoreId(),
+  );
+
+  const messages = syncFrom.getChangeMessages(syncTo.getSeenHlcs());
+  console.log('process messages', messages);
+
+  syncTo.setChangeMessages(messages);
+  console.log('new contents', syncTo.getStore().getTables());
 };
 
 const store1 = createStore();

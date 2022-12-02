@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import {CellOrUndefined, Store} from 'tinybase/store';
 import {Hlc, getHlcFunction} from './hlc';
 import {Id} from 'tinybase/common';
@@ -21,28 +20,18 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
 
   const getHlc = getHlcFunction(uniqueStoreId, offset);
 
-  store.addCellListener(
-    null,
-    null,
-    null,
-    (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) => {
-      if (listening) {
-        allChanges.set(getHlc(), [tableId, rowId, cellId, cell]);
-      }
-    },
-  );
+  const getSeenHlcs = (): Hlc[] => mapKeys(allChanges);
 
-  const sendChangeMessages = (): ChangeMessages => {
-    const messages = mapMap(
-      allChanges,
-      (change: Change, hlc: Hlc): ChangeMessage => [hlc, ...change],
+  const getChangeMessages = (seenHlcs: Hlc[] = []): ChangeMessages => {
+    const messages: ChangeMessages = [];
+    mapForEach(allChanges, (hlc: Hlc, change: Change) =>
+      // clearly this is not going to scale
+      seenHlcs.includes(hlc) ? 0 : messages.push([hlc, ...change]),
     );
-    console.log(uniqueStoreId, 'send messages', messages);
     return messages;
   };
-  const receiveChangeMessages = (remoteChangeMessages: ChangeMessages) => {
-    console.log(uniqueStoreId, 'receive messages', remoteChangeMessages);
 
+  const setChangeMessages = (remoteChangeMessages: ChangeMessages) => {
     listening = 0;
     store.transaction(() =>
       remoteChangeMessages.forEach(([hlc, tableId, rowId, cellId, cell]) =>
@@ -53,15 +42,6 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
             cellId,
           );
           if (isUndefined(latestChangeHlc) || hlc > latestChangeHlc) {
-            console.log(
-              uniqueStoreId,
-              'update',
-              hlc,
-              tableId,
-              rowId,
-              cellId,
-              cell,
-            );
             setOrDelCell(store, tableId, rowId, cellId, cell);
             mapSet(
               mapEnsure(
@@ -78,20 +58,35 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
       ),
     );
     listening = 1;
-
-    console.log(uniqueStoreId, 'contents', store.getTables());
   };
+
+  const getUniqueStoreId = () => uniqueStoreId;
+
+  const getStore = () => store;
 
   const sync = {
-    sendChangeMessages,
-    receiveChangeMessages,
-    uniqueStoreId,
+    getSeenHlcs,
+    getChangeMessages,
+    setChangeMessages,
+    getUniqueStoreId,
+    getStore,
   };
+
+  store.addCellListener(
+    null,
+    null,
+    null,
+    (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) => {
+      if (listening) {
+        allChanges.set(getHlc(), [tableId, rowId, cellId, cell]);
+      }
+    },
+  );
 
   return Object.freeze(sync);
 };
 
-// Will come from the TinyBase common library
+// Temporarily ripped from the TinyBase common library:
 const mapNew = <Key, Value>(entries?: [Key, Value][]): Map<Key, Value> =>
   new Map(entries);
 const mapGet = <Key, Value>(
@@ -108,21 +103,23 @@ const mapEnsure = <Key, Value>(
   }
   return map.get(key) as Value;
 };
-const mapMap = <Key, Value, Return>(
-  coll: Map<Key, Value> | undefined,
-  cb: (value: Value, key: Key) => Return,
-): Return[] =>
-  arrayMap([...(coll?.entries() ?? [])], ([key, value]) => cb(value, key));
 const mapSet = <Key, Value>(
   map: Map<Key, Value> | undefined,
   key: Key,
   value?: Value,
 ): Map<Key, Value> | undefined =>
   isUndefined(value) ? (collDel(map, key), map) : map?.set(key, value);
-const arrayMap = <Value, Return>(
-  array: Value[],
-  cb: (value: Value, index: number, array: Value[]) => Return,
-): Return[] => array.map(cb);
+const mapKeys = <Key>(map: Map<Key, unknown> | undefined): Key[] => [
+  ...(map?.keys() ?? []),
+];
+const mapForEach = <Key, Value>(
+  map: Map<Key, Value> | undefined,
+  cb: (key: Key, value: Value) => void,
+): void => collForEach(map, (value, key) => cb(key, value));
+const collForEach = <Value>(
+  coll: Coll<Value> | undefined,
+  cb: (value: Value, key: any) => void,
+): void => coll?.forEach(cb);
 const collDel = (
   coll: Coll<unknown> | undefined,
   keyOrValue: unknown,
