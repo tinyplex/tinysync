@@ -32,10 +32,11 @@ export const getHlcFunctions = (
     const hash = getHash(hlc);
     let node = seenHlcTrieRoot;
     hlc.split('').forEach((char) => {
-      mapSet(node, '', (mapEnsure(node, '', () => 0) as number) ^ hash);
-      node = mapEnsure(node, char, mapNew) as HlcTrieNode;
+      mapSet(node, '', (mapGet(node, '') as number) ^ hash);
+      node = mapEnsure(node, char, () =>
+        mapSet(mapNew(), '', 0),
+      ) as HlcTrieNode;
     });
-    mapSet(node, '', hash);
     return hlc;
   };
 
@@ -107,7 +108,7 @@ const getHash = (hlc: Hlc): number => {
   while (position) {
     hash = ((hash << 5) + hash) ^ hlc.charCodeAt(--position);
   }
-  return hash >>> 0;
+  return hash;
 };
 
 const numberToB36 = (number: number, pad: number) =>
