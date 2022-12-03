@@ -1,4 +1,5 @@
 import {
+  arrayMap,
   collSize,
   isUndefined,
   mapEnsure,
@@ -23,6 +24,7 @@ export const getHlcFunctions = (
 ] => {
   let logicalTime = 0;
   let counter = 0;
+  const uniqueIdHash = numberToB36(getHash(uniqueId), 7);
 
   const seenHlcTrieRoot: HlcTrieNode = mapNew();
 
@@ -40,20 +42,19 @@ export const getHlcFunctions = (
   const getHlc = (): Hlc => {
     seenHlc();
     return addSeenHlc(
-      [logicalTime, (++counter + '').padStart(4, '0'), uniqueId].join(','),
+      [
+        numberToB36(logicalTime, 8),
+        numberToB36(++counter, 2),
+        uniqueIdHash,
+      ].join(','),
     );
   };
 
   const seenHlc = (remoteHlc?: Hlc): void => {
     const previousLogicalTime = logicalTime;
-    let remoteLogicalTime = 0;
-    let remoteCounter = 0;
-
-    if (!isUndefined(remoteHlc)) {
-      const remoteLogicalTimeAndCounter = addSeenHlc(remoteHlc).split(',');
-      remoteLogicalTime = parseInt(remoteLogicalTimeAndCounter[0]);
-      remoteCounter = parseInt(remoteLogicalTimeAndCounter[1]);
-    }
+    const [remoteLogicalTime, remoteCounter] = isUndefined(remoteHlc)
+      ? [0, 0]
+      : arrayMap(addSeenHlc(remoteHlc).split(','), b36ToNumber);
 
     logicalTime = Math.max(
       previousLogicalTime,
@@ -100,11 +101,16 @@ export const getHlcFunctions = (
   return [getHlc, seenHlc, getSeenHlcs, getExcessHlcs];
 };
 
-const getHash = (hlc: Hlc) => {
+const getHash = (hlc: Hlc): number => {
   let hash = 5381;
   let position = hlc.length;
   while (position) {
-    hash = (hash * 33) ^ hlc.charCodeAt(--position);
+    hash = ((hash << 5) + hash) ^ hlc.charCodeAt(--position);
   }
   return hash >>> 0;
 };
+
+const numberToB36 = (number: number, pad: number) =>
+  number.toString(36).padStart(pad, '0').substring(0, pad);
+
+const b36ToNumber = (b36: string) => parseInt(b36, 36);
