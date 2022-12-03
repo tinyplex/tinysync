@@ -1,5 +1,5 @@
 import {CellOrUndefined, Store} from 'tinybase/store';
-import {Hlc, getHlcFunction} from './hlc';
+import {Hlc, getHlcFunctions} from './hlc';
 import {
   IdMap2,
   IdMap3,
@@ -12,7 +12,6 @@ import {
   setOrDelCell,
 } from './common';
 import {Id} from 'tinybase/common';
-import {getTrieFunctions} from './trie';
 
 export type Change = [
   tableId: Id,
@@ -27,17 +26,19 @@ export type ChangeMessages = ChangeMessage[];
 export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   let listening = 1;
 
-  const getHlc = getHlcFunction(uniqueStoreId, offset);
-  const [addSeenHlc, getSeenHlcs, getExcessHlcs] = getTrieFunctions();
+  const [getHlc, seenHlc, getSeenHlcs, getExcessHlcs] = getHlcFunctions(
+    uniqueStoreId,
+    offset,
+  );
 
   const allChanges: Changes = mapNew();
   const latestChangeHlcs: IdMap3<Hlc> = mapNew();
 
   const getChangeMessages = (seenHlcs: any): ChangeMessages => {
     const messages: ChangeMessages = [];
-    arrayForEach(getExcessHlcs(seenHlcs), (hlc: Hlc) =>
-      messages.push([hlc, ...(mapGet(allChanges, hlc) as Change)]),
-    );
+    arrayForEach(getExcessHlcs(seenHlcs), (hlc: Hlc) => {
+      messages.push([hlc, ...(mapGet(allChanges, hlc) as Change)]);
+    });
     return messages;
   };
 
@@ -46,8 +47,7 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     store.transaction(() =>
       remoteChangeMessages.forEach(([hlc, tableId, rowId, cellId, cell]) =>
         mapEnsure(allChanges, hlc, () => {
-          getHlc(hlc);
-          addSeenHlc(hlc);
+          seenHlc(hlc);
           const latestChangeHlc = mapGet(
             mapGet(mapGet(latestChangeHlcs, tableId), rowId),
             cellId,
@@ -87,13 +87,10 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     null,
     null,
     null,
-    (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) => {
-      if (listening) {
-        const hlc = getHlc();
-        addSeenHlc(hlc);
-        mapSet(allChanges, hlc, [tableId, rowId, cellId, cell]);
-      }
-    },
+    (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) =>
+      listening
+        ? mapSet(allChanges, getHlc(), [tableId, rowId, cellId, cell])
+        : 0,
   );
 
   return Object.freeze(sync);

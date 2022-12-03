@@ -80,6 +80,11 @@ export const arrayForEach = <Value>(
   array: Value[],
   cb: (value: Value, index: number) => void,
 ): void => array.forEach(cb);
+export const ifNotUndefined = <Value, Return>(
+  value: Value | undefined,
+  then: (value: Value) => Return,
+  otherwise?: () => Return,
+): Return | undefined => (isUndefined(value) ? otherwise?.() : then(value));
 
 export type Coll<Value> = Map<unknown, Value> | Set<Value>;
 export type IdMap<Value> = Map<Id, Value>;

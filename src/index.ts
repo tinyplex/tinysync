@@ -10,7 +10,6 @@ const syncFromTo = (syncFrom: any, syncTo: any) => {
   );
 
   const seenHlcs = syncTo.getSeenHlcs();
-  // console.dir(seenHlcs, {depth: null});
 
   const messages = syncFrom.getChangeMessages(seenHlcs);
   console.log('process messages', messages);
@@ -39,3 +38,5 @@ syncFromTo(sync1, sync2);
 store2.setCell('pets', 'roger', 'species', 'dog');
 syncFromTo(sync1, sync3);
 syncFromTo(sync2, sync3);
+
+console.dir(sync3.getSeenHlcs(), {depth: null});
