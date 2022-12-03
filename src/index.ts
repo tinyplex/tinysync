@@ -9,11 +9,16 @@ const syncFromTo = (syncFrom: any, syncTo: any) => {
     syncTo.getUniqueStoreId(),
   );
 
-  const messages = syncFrom.getChangeMessages(syncTo.getSeenHlcs());
+  const seenHlcs = syncTo.getSeenHlcs();
+  // console.dir(seenHlcs, {depth: null});
+
+  const messages = syncFrom.getChangeMessages(seenHlcs);
   console.log('process messages', messages);
 
-  syncTo.setChangeMessages(messages);
-  console.log('new contents', syncTo.getStore().getTables());
+  if (messages.length > 0) {
+    syncTo.setChangeMessages(messages);
+    console.log('new contents', syncTo.getStore().getTables());
+  }
 };
 
 const store1 = createStore();

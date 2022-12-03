@@ -1,6 +1,18 @@
 import {CellOrUndefined, Store} from 'tinybase/store';
 import {Hlc, getHlcFunction} from './hlc';
+import {
+  IdMap2,
+  IdMap3,
+  arrayForEach,
+  isUndefined,
+  mapEnsure,
+  mapGet,
+  mapNew,
+  mapSet,
+  setOrDelCell,
+} from './common';
 import {Id} from 'tinybase/common';
+import {getTrieFunctions} from './trie';
 
 export type Change = [
   tableId: Id,
@@ -15,18 +27,16 @@ export type ChangeMessages = ChangeMessage[];
 export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   let listening = 1;
 
+  const getHlc = getHlcFunction(uniqueStoreId, offset);
+  const [addSeenHlc, getSeenHlcs, getExcessHlcs] = getTrieFunctions();
+
   const allChanges: Changes = mapNew();
   const latestChangeHlcs: IdMap3<Hlc> = mapNew();
 
-  const getHlc = getHlcFunction(uniqueStoreId, offset);
-
-  const getSeenHlcs = (): Hlc[] => mapKeys(allChanges);
-
-  const getChangeMessages = (seenHlcs: Hlc[] = []): ChangeMessages => {
+  const getChangeMessages = (seenHlcs: any): ChangeMessages => {
     const messages: ChangeMessages = [];
-    mapForEach(allChanges, (hlc: Hlc, change: Change) =>
-      // clearly this is not going to scale
-      seenHlcs.includes(hlc) ? 0 : messages.push([hlc, ...change]),
+    arrayForEach(getExcessHlcs(seenHlcs), (hlc: Hlc) =>
+      messages.push([hlc, ...(mapGet(allChanges, hlc) as Change)]),
     );
     return messages;
   };
@@ -37,6 +47,7 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
       remoteChangeMessages.forEach(([hlc, tableId, rowId, cellId, cell]) =>
         mapEnsure(allChanges, hlc, () => {
           getHlc(hlc);
+          addSeenHlc(hlc);
           const latestChangeHlc = mapGet(
             mapGet(mapGet(latestChangeHlcs, tableId), rowId),
             cellId,
@@ -78,65 +89,12 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     null,
     (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) => {
       if (listening) {
-        allChanges.set(getHlc(), [tableId, rowId, cellId, cell]);
+        const hlc = getHlc();
+        addSeenHlc(hlc);
+        mapSet(allChanges, hlc, [tableId, rowId, cellId, cell]);
       }
     },
   );
 
   return Object.freeze(sync);
 };
-
-// Temporarily ripped from the TinyBase common library:
-const mapNew = <Key, Value>(entries?: [Key, Value][]): Map<Key, Value> =>
-  new Map(entries);
-const mapGet = <Key, Value>(
-  map: Map<Key, Value> | undefined,
-  key: Key,
-): Value | undefined => map?.get(key);
-const mapEnsure = <Key, Value>(
-  map: Map<Key, Value>,
-  key: Key,
-  getDefaultValue: () => Value,
-): Value => {
-  if (!map.has(key)) {
-    map.set(key, getDefaultValue());
-  }
-  return map.get(key) as Value;
-};
-const mapSet = <Key, Value>(
-  map: Map<Key, Value> | undefined,
-  key: Key,
-  value?: Value,
-): Map<Key, Value> | undefined =>
-  isUndefined(value) ? (collDel(map, key), map) : map?.set(key, value);
-const mapKeys = <Key>(map: Map<Key, unknown> | undefined): Key[] => [
-  ...(map?.keys() ?? []),
-];
-const mapForEach = <Key, Value>(
-  map: Map<Key, Value> | undefined,
-  cb: (key: Key, value: Value) => void,
-): void => collForEach(map, (value, key) => cb(key, value));
-const collForEach = <Value>(
-  coll: Coll<Value> | undefined,
-  cb: (value: Value, key: any) => void,
-): void => coll?.forEach(cb);
-const collDel = (
-  coll: Coll<unknown> | undefined,
-  keyOrValue: unknown,
-): boolean | undefined => coll?.delete(keyOrValue);
-const isUndefined = (thing: unknown): thing is undefined | null =>
-  thing == undefined;
-const setOrDelCell = (
-  store: Store,
-  tableId: Id,
-  rowId: Id,
-  cellId: Id,
-  cell: CellOrUndefined,
-) =>
-  isUndefined(cell)
-    ? store.delCell(tableId, rowId, cellId, true)
-    : store.setCell(tableId, rowId, cellId, cell);
-type Coll<Value> = Map<unknown, Value> | Set<Value>;
-type IdMap<Value> = Map<Id, Value>;
-type IdMap2<Value> = IdMap<IdMap<Value>>;
-type IdMap3<Value> = IdMap<IdMap2<Value>>;
