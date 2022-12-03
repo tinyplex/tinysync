@@ -1,6 +1,6 @@
 import {
   collSize,
-  ifNotUndefined,
+  isUndefined,
   mapEnsure,
   mapForEach,
   mapGet,
@@ -45,19 +45,16 @@ export const getHlcFunctions = (
   };
 
   const seenHlc = (remoteHlc?: Hlc): void => {
-    const [remoteLogicalTime, remoteCounter] = ifNotUndefined(
-      remoteHlc,
-      (remoteHlc) => {
-        const remoteLogicalTimeAndCounter = addSeenHlc(remoteHlc).split(',');
-        return [
-          parseInt(remoteLogicalTimeAndCounter[0]),
-          parseInt(remoteLogicalTimeAndCounter[1]),
-        ];
-      },
-      () => [0, 0],
-    ) as [number, number];
-
     const previousLogicalTime = logicalTime;
+    let remoteLogicalTime = 0;
+    let remoteCounter = 0;
+
+    if (!isUndefined(remoteHlc)) {
+      const remoteLogicalTimeAndCounter = addSeenHlc(remoteHlc).split(',');
+      remoteLogicalTime = parseInt(remoteLogicalTimeAndCounter[0]);
+      remoteCounter = parseInt(remoteLogicalTimeAndCounter[1]);
+    }
+
     logicalTime = Math.max(
       previousLogicalTime,
       remoteLogicalTime,
