@@ -15,7 +15,7 @@ export type Hlc = string;
 // - 24 bits for counter (~16 million)
 // - 30 bits for hash of unique client id (~1 billion)
 
-export type HlcTrieNode = Map<Id, string | HlcTrieNode>;
+export type HlcTrieNode = Map<Id, number | HlcTrieNode>;
 
 export const getHlcFunctions = (
   uniqueId: Id,
@@ -30,14 +30,14 @@ export const getHlcFunctions = (
   let counter = 0;
   const uniqueIdHash = getHash(uniqueId);
 
-  const newNode = (): HlcTrieNode => mapSet(mapNew(), '', '') as HlcTrieNode;
+  const newNode = (): HlcTrieNode => mapSet(mapNew(), '', 0) as HlcTrieNode;
 
   const seenHlcTrieRoot: HlcTrieNode = newNode();
 
   const addSeenHlc = (hlc: Hlc): Hlc => {
     let node = seenHlcTrieRoot;
     hlc.split('').forEach((char) => {
-      mapSet(node, '', mapGet(node, '') + hlc);
+      mapSet(node, '', ((mapGet(node, '') as number) ^ getHash(hlc)) >>> 0);
       node = mapEnsure(node, char, newNode) as HlcTrieNode;
     });
     return hlc;

@@ -42,9 +42,9 @@ syncFromTo(sync2, sync3);
 console.dir(sync3.getSeenHlcs(), {depth: null});
 
 // const store0 = createStore();
-// const sync0 = createSync(store1, 'store0');
+// const sync0 = createSync(store0, 'store0');
 // const C = 2;
-// store1.transaction(() => {
+// store0.transaction(() => {
 //   for (let t = 0; t < C; t++) {
 //     for (let r = 0; r < C; r++) {
 //       for (let c = 0; c < C; c++) {
@@ -54,3 +54,4 @@ console.dir(sync3.getSeenHlcs(), {depth: null});
 //   }
 // });
 // console.dir(sync0.getSeenHlcs(), {depth: null});
+// console.log(process.memoryUsage().heapUsed / 1000000);
