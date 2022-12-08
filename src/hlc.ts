@@ -108,50 +108,6 @@ const getHash = (value: string): number => {
   return hash >>> 0; // unsigned 32 bit
 };
 
-const encodeHlc = (
-  logicalTime42: number,
-  counter24: number,
-  clientHash30: number,
-): Hlc =>
-  DIGITS[(logicalTime42 / SHIFT36) & MASK6] +
-  DIGITS[(logicalTime42 / SHIFT30) & MASK6] +
-  DIGITS[(logicalTime42 / SHIFT24) & MASK6] +
-  DIGITS[(logicalTime42 / SHIFT18) & MASK6] +
-  DIGITS[(logicalTime42 / SHIFT12) & MASK6] +
-  DIGITS[(logicalTime42 / SHIFT6) & MASK6] +
-  DIGITS[logicalTime42 & MASK6] +
-  DIGITS[(counter24 / SHIFT18) & MASK6] +
-  DIGITS[(counter24 / SHIFT12) & MASK6] +
-  DIGITS[(counter24 / SHIFT6) & MASK6] +
-  DIGITS[counter24 & MASK6] +
-  DIGITS[(clientHash30 / SHIFT24) & MASK6] +
-  DIGITS[(clientHash30 / SHIFT18) & MASK6] +
-  DIGITS[(clientHash30 / SHIFT12) & MASK6] +
-  DIGITS[(clientHash30 / SHIFT6) & MASK6] +
-  DIGITS[clientHash30 & MASK6];
-
-const decodeHlc = (hlc16: Hlc) => [
-  DIGIT_MAP[hlc16[0]] * SHIFT36 +
-    DIGIT_MAP[hlc16[1]] * SHIFT30 +
-    DIGIT_MAP[hlc16[2]] * SHIFT24 +
-    DIGIT_MAP[hlc16[3]] * SHIFT18 +
-    DIGIT_MAP[hlc16[4]] * SHIFT12 +
-    DIGIT_MAP[hlc16[5]] * SHIFT6 +
-    DIGIT_MAP[hlc16[6]],
-  DIGIT_MAP[hlc16[7]] * SHIFT18 +
-    DIGIT_MAP[hlc16[8]] * SHIFT12 +
-    DIGIT_MAP[hlc16[9]] * SHIFT6 +
-    DIGIT_MAP[hlc16[10]],
-  DIGIT_MAP[hlc16[11]] * SHIFT24 +
-    DIGIT_MAP[hlc16[12]] * SHIFT18 +
-    DIGIT_MAP[hlc16[13]] * SHIFT12 +
-    DIGIT_MAP[hlc16[14]] * SHIFT6 +
-    DIGIT_MAP[hlc16[15]],
-];
-
-const DIGITS =
-  '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz{}';
-const DIGIT_MAP = {};
 const SHIFT36 = 2 ** 36;
 const SHIFT30 = 2 ** 30;
 const SHIFT24 = 2 ** 24;
@@ -159,4 +115,47 @@ const SHIFT18 = 2 ** 18;
 const SHIFT12 = 2 ** 12;
 const SHIFT6 = 2 ** 6;
 const MASK6 = 63;
-DIGITS.split('').forEach((digit, i) => (DIGIT_MAP[digit] = i));
+
+const toB64 = (num: number): string => String.fromCharCode(48 + (num & MASK6));
+const fromB64 = (str: string, pos: number): number => str.charCodeAt(pos) - 48;
+
+const encodeHlc = (
+  logicalTime42: number,
+  counter24: number,
+  clientHash30: number,
+): Hlc =>
+  toB64(logicalTime42 / SHIFT36) +
+  toB64(logicalTime42 / SHIFT30) +
+  toB64(logicalTime42 / SHIFT24) +
+  toB64(logicalTime42 / SHIFT18) +
+  toB64(logicalTime42 / SHIFT12) +
+  toB64(logicalTime42 / SHIFT6) +
+  toB64(logicalTime42) +
+  toB64(counter24 / SHIFT18) +
+  toB64(counter24 / SHIFT12) +
+  toB64(counter24 / SHIFT6) +
+  toB64(counter24) +
+  toB64(clientHash30 / SHIFT24) +
+  toB64(clientHash30 / SHIFT18) +
+  toB64(clientHash30 / SHIFT12) +
+  toB64(clientHash30 / SHIFT6) +
+  toB64(clientHash30);
+
+const decodeHlc = (hlc16: Hlc) => [
+  fromB64(hlc16, 0) * SHIFT36 +
+    fromB64(hlc16, 1) * SHIFT30 +
+    fromB64(hlc16, 2) * SHIFT24 +
+    fromB64(hlc16, 3) * SHIFT18 +
+    fromB64(hlc16, 4) * SHIFT12 +
+    fromB64(hlc16, 5) * SHIFT6 +
+    fromB64(hlc16, 6),
+  fromB64(hlc16, 7) * SHIFT18 +
+    fromB64(hlc16, 8) * SHIFT12 +
+    fromB64(hlc16, 9) * SHIFT6 +
+    fromB64(hlc16, 10),
+  fromB64(hlc16, 11) * SHIFT24 +
+    fromB64(hlc16, 12) * SHIFT18 +
+    fromB64(hlc16, 13) * SHIFT12 +
+    fromB64(hlc16, 14) * SHIFT6 +
+    fromB64(hlc16, 15),
+];
