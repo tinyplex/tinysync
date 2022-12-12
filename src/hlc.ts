@@ -1,21 +1,28 @@
 import {
   collSize,
   isUndefined,
+  jsonString,
   mapEnsure,
   mapForEach,
   mapGet,
+  mapKeys,
   mapNew,
   mapSet,
 } from './common';
 import {Id} from 'tinybase/common';
 
+export type HlcParts = [
+  logicalTime42: number,
+  counter24: number,
+  clientHash30: number,
+];
 export type Hlc = string;
 // Sortable 16 digit radix-64 string of 0-9a-zA-Z{} representing 96 bits:
 // - 42 bits for time in milliseconds (~139 years)
 // - 24 bits for counter (~16 million)
 // - 30 bits for hash of unique client id (~1 billion)
 
-export type HlcTrieNode = Map<Id, number | HlcTrieNode>;
+export type HlcTrieNode = Map<Id | 0, HlcTrieNode | number>;
 
 export const getHlcFunctions = (
   uniqueId: Id,
@@ -30,16 +37,18 @@ export const getHlcFunctions = (
   let counter = 0;
   const uniqueIdHash = getHash(uniqueId);
 
-  const newNode = (): HlcTrieNode => mapSet(mapNew(), '', 0) as HlcTrieNode;
-
   const seenHlcTrieRoot: HlcTrieNode = newNode();
 
   const addSeenHlc = (hlc: Hlc): Hlc => {
-    let node = seenHlcTrieRoot;
-    hlc.split('').forEach((char) => {
-      mapSet(node, '', ((mapGet(node, '') as number) ^ getHash(hlc)) >>> 0);
-      node = mapEnsure(node, char, newNode) as HlcTrieNode;
-    });
+    const hash = getHash(hlc);
+    stringReduce(
+      hlc,
+      (node, char) => {
+        mapSet(node, 0, ((mapGet(node, 0) as number) ^ hash) >>> 0);
+        return mapEnsure(node, char, newNode) as HlcTrieNode;
+      },
+      seenHlcTrieRoot,
+    );
     return hlc;
   };
 
@@ -69,29 +78,28 @@ export const getHlcFunctions = (
         : -1;
   };
 
-  const getSeenHlcs = () => seenHlcTrieRoot;
+  const getSeenHlcs = () => {
+    return seenHlcTrieRoot;
+    return jsonString(shrinkNode(seenHlcTrieRoot));
+  };
 
   const getExcessHlcs = (
-    smallerHlcTrieNode: HlcTrieNode | undefined,
-    largerHlcTrieNodeTrie: HlcTrieNode = seenHlcTrieRoot,
+    smallerNode: HlcTrieNode | undefined,
+    largerNode: HlcTrieNode = seenHlcTrieRoot,
     hlc = '',
     excesses: Hlc[] = [],
   ): Hlc[] => {
-    if (mapGet(largerHlcTrieNodeTrie, '') != mapGet(smallerHlcTrieNode, '')) {
-      if (collSize(largerHlcTrieNodeTrie) == 1) {
-        excesses.push(hlc);
-      } else {
-        mapForEach(largerHlcTrieNodeTrie, (key, superChild) => {
-          if (key != '') {
+    if (mapGet(largerNode, 0) != mapGet(smallerNode, 0)) {
+      collSize(largerNode) == 1
+        ? excesses.push(hlc)
+        : nodeForEach(largerNode, (key, largerChild) =>
             getExcessHlcs(
-              mapGet(smallerHlcTrieNode, key) as HlcTrieNode | undefined,
-              superChild as HlcTrieNode,
+              mapGet(smallerNode, key) as HlcTrieNode | undefined,
+              largerChild,
               hlc + key,
               excesses,
-            );
-          }
-        });
-      }
+            ),
+          );
     }
     return excesses;
   };
@@ -99,14 +107,19 @@ export const getHlcFunctions = (
   return [getHlc, seenHlc, getSeenHlcs, getExcessHlcs];
 };
 
-const getHash = (value: string): number => {
-  let hash = 5381;
-  let position = value.length;
-  while (position) {
-    hash = ((hash << 5) + hash) ^ value.charCodeAt(--position);
-  }
-  return hash >>> 0; // unsigned 32 bit
-};
+const stringReduce = <Return>(
+  value: string,
+  cb: (currentReturn: Return, char: string) => Return,
+  initial: Return,
+) => value.split('').reduce(cb, initial);
+
+const getHash = (value: string): number =>
+  stringReduce(
+    value,
+    (hash: number, char: string): number =>
+      ((hash << 5) + hash) ^ char.charCodeAt(0),
+    5381,
+  ) >>> 0;
 
 const SHIFT36 = 2 ** 36;
 const SHIFT30 = 2 ** 30;
@@ -141,7 +154,7 @@ const encodeHlc = (
   toB64(clientHash30 / SHIFT6) +
   toB64(clientHash30);
 
-const decodeHlc = (hlc16: Hlc) => [
+const decodeHlc = (hlc16: Hlc): HlcParts => [
   fromB64(hlc16, 0) * SHIFT36 +
     fromB64(hlc16, 1) * SHIFT30 +
     fromB64(hlc16, 2) * SHIFT24 +
@@ -159,3 +172,37 @@ const decodeHlc = (hlc16: Hlc) => [
     fromB64(hlc16, 14) * SHIFT6 +
     fromB64(hlc16, 15),
 ];
+
+const newNode = (): HlcTrieNode => mapSet(mapNew(), 0, 0) as HlcTrieNode;
+
+const nodeForEach = (
+  node: HlcTrieNode,
+  cb: (key: Id, child: HlcTrieNode) => void,
+) =>
+  mapForEach(node, (key, child) =>
+    key === 0 ? 0 : cb(key, child as HlcTrieNode),
+  );
+
+const shrinkNode = (
+  node: HlcTrieNode,
+  key = '',
+): HlcTrieNode | [key: string, node: HlcTrieNode | 1] => {
+  if (collSize(node) == 1) {
+    return [key, 1];
+  }
+  const node2 = mapSet(mapNew(), 0, mapGet(node, 0)) as HlcTrieNode;
+  let lastKey = '';
+  let lastChildNode: HlcTrieNode | 1 = 1;
+  nodeForEach(node, (key, childNode) => {
+    [lastKey, lastChildNode] = shrinkNode(childNode, key) as [
+      key: string,
+      node: HlcTrieNode | 1,
+    ];
+    mapSet(node2, lastKey, lastChildNode);
+  });
+  return key === ''
+    ? node2
+    : collSize(node2) > 2
+    ? [key, node2]
+    : [key + lastKey, lastChildNode];
+};

@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
 import {createStore} from 'tinybase/store';
 import {createSync} from './sync';
+import {jsonString} from './common';
+import {seenHlcEncode} from './hlc';
 
 const syncFromTo = (syncFrom: any, syncTo: any) => {
   console.log(
@@ -40,10 +42,11 @@ syncFromTo(sync1, sync3);
 syncFromTo(sync2, sync3);
 
 console.dir(sync3.getSeenHlcs(), {depth: null});
+// console.log(seenHlcEncode(sync3.getSeenHlcs()).length);
 
 // const store0 = createStore();
 // const sync0 = createSync(store0, 'store0');
-// const C = 2;
+// const C = 100;
 // store0.transaction(() => {
 //   for (let t = 0; t < C; t++) {
 //     for (let r = 0; r < C; r++) {
@@ -53,5 +56,5 @@ console.dir(sync3.getSeenHlcs(), {depth: null});
 //     }
 //   }
 // });
-// console.dir(sync0.getSeenHlcs(), {depth: null});
+//console.log(jsonString(sync0.getSeenHlcs()));
 // console.log(process.memoryUsage().heapUsed / 1000000);
