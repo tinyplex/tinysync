@@ -1,8 +1,6 @@
 /* eslint-disable no-console */
 import {createStore} from 'tinybase/store';
 import {createSync} from './sync';
-import {jsonString} from './common';
-import {seenHlcEncode} from './hlc';
 
 const syncFromTo = (syncFrom: any, syncTo: any) => {
   console.log(
@@ -11,13 +9,15 @@ const syncFromTo = (syncFrom: any, syncTo: any) => {
     syncTo.getUniqueStoreId(),
   );
 
-  const seenHlcs = syncTo.getSeenHlcs();
+  const currentToChanges = syncTo.getChanges();
+  console.log('[send]', currentToChanges.length);
 
-  const messages = syncFrom.getChangeMessages(seenHlcs);
-  console.log('process messages', messages);
+  const nextToChanges = syncFrom.getChanges(currentToChanges);
+  console.log('[recv]', nextToChanges.length);
+  console.log('process messages', nextToChanges);
 
-  if (messages.length > 0) {
-    syncTo.setChangeMessages(messages);
+  if (nextToChanges.length > 0) {
+    syncTo.setChanges(nextToChanges);
     console.log('new contents', syncTo.getStore().getTables());
   }
 };
@@ -41,8 +41,9 @@ store2.setCell('pets', 'roger', 'species', 'dog');
 syncFromTo(sync1, sync3);
 syncFromTo(sync2, sync3);
 
-console.dir(sync3.getSeenHlcs(), {depth: null});
-// console.log(seenHlcEncode(sync3.getSeenHlcs()).length);
+syncFromTo(sync3, sync3);
+//console.dir(sync3.getChanges(), {depth: null});
+//console.log(seenHlcEncode(sync3.getSeenHlcs()).length);
 
 // const store0 = createStore();
 // const sync0 = createSync(store0, 'store0');
@@ -56,5 +57,5 @@ console.dir(sync3.getSeenHlcs(), {depth: null});
 //     }
 //   }
 // });
-//console.log(jsonString(sync0.getSeenHlcs()));
+// console.log(jsonString(sync0.getSeenHlcs()));
 // console.log(process.memoryUsage().heapUsed / 1000000);

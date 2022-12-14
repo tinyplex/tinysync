@@ -1,6 +1,28 @@
 import {CellOrUndefined, Store} from 'tinybase/store';
 import {Id} from 'tinybase/common';
 
+const MASK6 = 63;
+
+export const stringReduce = <Return>(
+  value: string,
+  cb: (currentReturn: Return, char: string) => Return,
+  initial: Return,
+) => value.split('').reduce(cb, initial);
+
+export const getHash = (value: string): number =>
+  stringReduce(
+    value,
+    (hash: number, char: string): number =>
+      ((hash << 5) + hash) ^ char.charCodeAt(0),
+    5381,
+  ) >>> 0;
+
+export const toB64 = (num: number): string =>
+  String.fromCharCode(48 + (num & MASK6));
+
+export const fromB64 = (str: string, pos: number): number =>
+  str.charCodeAt(pos) - 48;
+
 // Temporarily ripped from the TinyBase common library:
 export const mapNew = <Key, Value>(entries?: [Key, Value][]): Map<Key, Value> =>
   new Map(entries);
@@ -89,6 +111,7 @@ export const ifNotUndefined = <Value, Return>(
   then: (value: Value) => Return,
   otherwise?: () => Return,
 ): Return | undefined => (isUndefined(value) ? otherwise?.() : then(value));
+export const collClear = (coll: Coll<unknown>): void => coll.clear();
 
 export type Coll<Value> = Map<unknown, Value> | Set<Value>;
 export type IdMap<Value> = Map<Id, Value>;

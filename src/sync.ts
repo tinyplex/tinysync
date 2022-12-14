@@ -4,8 +4,10 @@ import {
   IdMap2,
   IdMap3,
   arrayForEach,
+  collClear,
   isUndefined,
   mapEnsure,
+  mapForEach,
   mapGet,
   mapNew,
   mapSet,
@@ -20,53 +22,73 @@ export type Change = [
   cell: CellOrUndefined,
 ];
 export type Changes = Map<Hlc, Change>;
-export type ChangeMessage = [Hlc, ...Change];
-export type ChangeMessages = ChangeMessage[];
+export type ChangeDigest = string; //[Hlc, ...Change][];
 
 export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   let listening = 1;
 
-  const [getHlc, seenHlc, getSeenHlcs, getExcessHlcs] = getHlcFunctions(
-    uniqueStoreId,
-    offset,
-  );
+  const [getLocalHlc, seenRemoteHlc] = getHlcFunctions(uniqueStoreId, offset);
 
-  const allChanges: Changes = mapNew();
-  const latestChangeHlcs: IdMap3<Hlc> = mapNew();
+  const undigestedChanges: Changes = mapNew();
+  const digestedChanges: Changes = mapNew();
+  const latestHlcsByCell: IdMap3<Hlc> = mapNew();
 
-  const getChangeMessages = (seenHlcs: any): ChangeMessages => {
-    const messages: ChangeMessages = [];
-    arrayForEach(getExcessHlcs(seenHlcs), (hlc: Hlc) => {
-      messages.push([hlc, ...(mapGet(allChanges, hlc) as Change)]);
-    });
-    return messages;
+  const handleChange = (
+    hlc: Hlc,
+    tableId: Id,
+    rowId: Id,
+    cellId: Id,
+    cell: CellOrUndefined,
+  ): 0 | 1 => {
+    mapSet(undigestedChanges, hlc, [tableId, rowId, cellId, cell]);
+    const latestHlcByCell = mapGet(
+      mapGet(mapGet(latestHlcsByCell, tableId), rowId),
+      cellId,
+    );
+    if (isUndefined(latestHlcByCell) || hlc > latestHlcByCell) {
+      mapSet(
+        mapEnsure(
+          mapEnsure<Id, IdMap2<Hlc>>(latestHlcsByCell, tableId, mapNew),
+          rowId,
+          mapNew,
+        ),
+        cellId,
+        hlc,
+      );
+      return 1;
+    }
+    return 0;
   };
 
-  const setChangeMessages = (remoteChangeMessages: ChangeMessages) => {
+  const getChanges = (except?: ChangeDigest): ChangeDigest => {
+    mapForEach(undigestedChanges, (hlc, change) =>
+      mapSet(digestedChanges, hlc, change),
+    );
+    collClear(undigestedChanges);
+
+    const exceptHlcs = new Set();
+    arrayForEach(JSON.parse(except ?? '[]') as [Hlc, ...Change][], ([hlc]) =>
+      exceptHlcs.add(hlc),
+    );
+
+    const messages: [Hlc, ...Change][] = [];
+    mapForEach(digestedChanges, (hlc, change) => {
+      if (!exceptHlcs.has(hlc)) {
+        messages.push([hlc, ...change]);
+      }
+    });
+    return JSON.stringify(messages);
+  };
+
+  const setChanges = (changes: ChangeDigest) => {
     listening = 0;
     store.transaction(() =>
-      remoteChangeMessages.forEach(([hlc, tableId, rowId, cellId, cell]) =>
-        mapEnsure(allChanges, hlc, () => {
-          seenHlc(hlc);
-          const latestChangeHlc = mapGet(
-            mapGet(mapGet(latestChangeHlcs, tableId), rowId),
-            cellId,
-          );
-          if (isUndefined(latestChangeHlc) || hlc > latestChangeHlc) {
-            setOrDelCell(store, tableId, rowId, cellId, cell);
-            mapSet(
-              mapEnsure(
-                mapEnsure<Id, IdMap2<Hlc>>(latestChangeHlcs, tableId, mapNew),
-                rowId,
-                mapNew,
-              ),
-              cellId,
-              hlc,
-            );
-          }
-          return [tableId, rowId, cellId, cell];
-        }),
-      ),
+      JSON.parse(changes).forEach(([hlc, tableId, rowId, cellId, cell]) => {
+        seenRemoteHlc(hlc);
+        if (handleChange(hlc, tableId, rowId, cellId, cell)) {
+          setOrDelCell(store, tableId, rowId, cellId, cell);
+        }
+      }),
     );
     listening = 1;
   };
@@ -76,9 +98,8 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   const getStore = () => store;
 
   const sync = {
-    getSeenHlcs,
-    getChangeMessages,
-    setChangeMessages,
+    getChanges,
+    setChanges,
     getUniqueStoreId,
     getStore,
   };
@@ -88,9 +109,7 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     null,
     null,
     (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) =>
-      listening
-        ? mapSet(allChanges, getHlc(), [tableId, rowId, cellId, cell])
-        : 0,
+      listening ? handleChange(getLocalHlc(), tableId, rowId, cellId, cell) : 0,
   );
 
   return Object.freeze(sync);
