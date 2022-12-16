@@ -5,7 +5,7 @@ const MASK6 = 63;
 
 export const stringReduce = <Return>(
   value: string,
-  cb: (currentReturn: Return, char: string) => Return,
+  cb: (currentReturn: Return, char: string, index: number) => Return,
   initial: Return,
 ) => value.split('').reduce(cb, initial);
 
@@ -112,6 +112,8 @@ export const ifNotUndefined = <Value, Return>(
   otherwise?: () => Return,
 ): Return | undefined => (isUndefined(value) ? otherwise?.() : then(value));
 export const collClear = (coll: Coll<unknown>): void => coll.clear();
+export const arrayPush = <Value>(array: Value[], ...values: Value[]): number =>
+  array.push(...values);
 
 export type Coll<Value> = Map<unknown, Value> | Set<Value>;
 export type IdMap<Value> = Map<Id, Value>;

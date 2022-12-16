@@ -1,49 +1,43 @@
 /* eslint-disable no-console */
 import {createStore} from 'tinybase/store';
 import {createSync} from './sync';
+import {jsonString} from './common';
 
 const syncFromTo = (syncFrom: any, syncTo: any) => {
   console.log(
-    '\nsync from/to',
-    syncFrom.getUniqueStoreId(),
-    syncTo.getUniqueStoreId(),
+    `\nSYNC ${syncFrom.getUniqueStoreId()} to ${syncTo.getUniqueStoreId()}`,
   );
 
   const currentToChanges = syncTo.getChanges();
-  console.log('[send]', currentToChanges.length);
+  console.log(`REQ ${syncTo.getUniqueStoreId()}`, jsonString(currentToChanges));
 
   const nextToChanges = syncFrom.getChanges(currentToChanges);
-  console.log('[recv]', nextToChanges.length);
-  console.log('process messages', nextToChanges);
+  console.log(`RES ${syncFrom.getUniqueStoreId()}`, jsonString(nextToChanges));
 
-  if (nextToChanges.length > 0) {
-    syncTo.setChanges(nextToChanges);
-    console.log('new contents', syncTo.getStore().getTables());
-  }
+  syncTo.setChanges(nextToChanges);
+  console.log('New contents', syncTo.getStore().getTables());
 };
 
 const store1 = createStore();
-const sync1 = createSync(store1, 'store1', 1000);
+const sync1 = createSync(store1, 'store1');
 store1.setCell('pets', 'roger', 'species', 'cat');
 
 const store2 = createStore();
 const sync2 = createSync(store2, 'store2');
-store2.setCell('pets', 'roger', 'species', 'dog');
+store2.setCell('pets', 'roger', 'color', 'brown');
+
+syncFromTo(sync1, sync2);
+syncFromTo(sync2, sync1);
 
 const store3 = createStore();
 const sync3 = createSync(store3, 'store3');
-
 syncFromTo(sync1, sync3);
-syncFromTo(sync2, sync3);
 
-syncFromTo(sync1, sync2);
-store2.setCell('pets', 'roger', 'species', 'dog');
+store3.setRow('pets', 'roger', {legs: 4});
 syncFromTo(sync1, sync3);
-syncFromTo(sync2, sync3);
+syncFromTo(sync3, sync1);
 
-syncFromTo(sync3, sync3);
-//console.dir(sync3.getChanges(), {depth: null});
-//console.log(seenHlcEncode(sync3.getSeenHlcs()).length);
+// --
 
 // const store0 = createStore();
 // const sync0 = createSync(store0, 'store0');
@@ -57,5 +51,5 @@ syncFromTo(sync3, sync3);
 //     }
 //   }
 // });
-// console.log(jsonString(sync0.getSeenHlcs()));
+// console.log(sync0.getChanges());
 // console.log(process.memoryUsage().heapUsed / 1000000);
