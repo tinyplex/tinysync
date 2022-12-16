@@ -5,6 +5,7 @@ import {
   IdMap3,
   arrayForEach,
   arrayPush,
+  arrayReduce,
   collClear,
   collIsEmpty,
   ifNotUndefined,
@@ -15,9 +16,11 @@ import {
   mapNew,
   mapSet,
   setOrDelCell,
-  stringReduce,
+  stringSplit,
 } from './common';
 import {Id} from 'tinybase/common';
+
+const MAX_DEPTH = 7;
 
 export type Change = [
   tableId: Id,
@@ -25,29 +28,25 @@ export type Change = [
   cellId: Id,
   cell: CellOrUndefined,
 ];
-export type Changes = Map<Hlc, Change>;
-
-type ChangeNode = Map<string, ChangeNode | Change>;
-const nodeNew = (): ChangeNode => mapNew() as ChangeNode;
-
-const nodeForEach = (
-  node: ChangeNode | undefined,
-  cb: (key: Id, child: ChangeNode | Change) => void,
-) => mapForEach(node, (key, child) => cb(key, child as ChangeNode));
+export type ChangeNode = Map<string, ChangeNode | Change>;
 
 const addLeaf = (node: ChangeNode, hlc: Hlc, change: Change) =>
-  stringReduce(
-    hlc,
+  arrayReduce(
+    stringSplit(hlc, '', MAX_DEPTH).concat(hlc.substring(MAX_DEPTH)),
     (node, char, index) =>
-      mapEnsure(node, char, index < 15 ? nodeNew : () => change) as ChangeNode,
+      mapEnsure(
+        node,
+        char,
+        index < MAX_DEPTH ? mapNew : () => change,
+      ) as ChangeNode,
     node,
   );
 
 const getDiff = (
   largerNode: ChangeNode,
   smallerNode: ChangeNode | undefined,
-  depth = 15,
-  diffNode: ChangeNode = nodeNew(),
+  depth = MAX_DEPTH,
+  diffNode: ChangeNode = mapNew(),
 ): ChangeNode | undefined => {
   mapForEach(largerNode, (key, largerChild) => {
     ifNotUndefined(
@@ -69,10 +68,10 @@ const getDiff = (
 const getLeaves = (
   node: ChangeNode | undefined,
   leaves: [Hlc, Change][] = [],
-  depth = 15,
+  depth = MAX_DEPTH,
   path = '',
 ): [Hlc, Change][] => {
-  nodeForEach(node, (key, child) => {
+  mapForEach(node, (key, child) => {
     depth
       ? getLeaves(child as ChangeNode, leaves, depth - 1, path + key)
       : arrayPush(leaves, [path + key, child as Change]);
@@ -86,7 +85,7 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   const [getLocalHlc, seenRemoteHlc] = getHlcFunctions(uniqueStoreId, offset);
 
   const undigestedChanges: Map<Hlc, Change> = mapNew();
-  const allChanges: ChangeNode = nodeNew();
+  const allChanges: ChangeNode = mapNew();
   const latestHlcsByCell: IdMap3<Hlc> = mapNew();
 
   const handleChange = (

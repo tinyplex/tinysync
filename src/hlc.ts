@@ -1,4 +1,4 @@
-import {fromB64, getHash, isUndefined, toB64} from './common';
+import {fromB64, isUndefined, stringHash, toB64} from './common';
 import {Id} from 'tinybase/common';
 
 export type HlcParts = [
@@ -8,9 +8,9 @@ export type HlcParts = [
 ];
 export type Hlc = string;
 // Sortable 16 digit radix-64 string of 0-9a-zA-Z{} representing 96 bits:
-// - 42 bits for time in milliseconds (~139 years)
-// - 24 bits for counter (~16 million)
-// - 30 bits for hash of unique client id (~1 billion)
+// - 42 bits (7 chars) for time in milliseconds (~139 years)
+// - 24 bits (4 chars) for counter (~16 million)
+// - 30 bits (5 chars) for hash of unique client id (~1 billion)
 
 const SHIFT36 = 2 ** 36;
 const SHIFT30 = 2 ** 30;
@@ -66,7 +66,7 @@ export const getHlcFunctions = (
 ): [() => Hlc, (remoteHlc: Hlc) => void] => {
   let logicalTime = 0;
   let counter = 0;
-  const uniqueIdHash = getHash(uniqueId);
+  const uniqueIdHash = stringHash(uniqueId);
 
   const getLocalHlc = (): Hlc => {
     seenRemoteHlc();

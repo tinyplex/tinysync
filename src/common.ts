@@ -3,15 +3,12 @@ import {Id} from 'tinybase/common';
 
 const MASK6 = 63;
 
-export const stringReduce = <Return>(
-  value: string,
-  cb: (currentReturn: Return, char: string, index: number) => Return,
-  initial: Return,
-) => value.split('').reduce(cb, initial);
+export const stringSplit = (value: string, separator = '', limit?: number) =>
+  value.split(separator, limit);
 
-export const getHash = (value: string): number =>
-  stringReduce(
-    value,
+export const stringHash = (value: string): number =>
+  arrayReduce(
+    stringSplit(value),
     (hash: number, char: string): number =>
       ((hash << 5) + hash) ^ char.charCodeAt(0),
     5381,
@@ -95,7 +92,7 @@ export const isInstanceOf = (
 ): boolean => thing instanceof cls;
 export const arrayReduce = <Value, Result>(
   array: Value[],
-  cb: (previous: Result, current: Value) => Result,
+  cb: (previous: Result, current: Value, index: number) => Result,
   initial: Result,
 ): Result => array.reduce(cb, initial);
 export const arrayMap = <Value, Return>(
