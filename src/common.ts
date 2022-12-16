@@ -86,6 +86,10 @@ export const jsonString = (obj: unknown): string =>
         )
       : value,
   );
+
+const object = Object;
+export const isObject = (obj: unknown): boolean =>
+  isInstanceOf(obj, object) && (obj as any).constructor == object;
 export const isInstanceOf = (
   thing: unknown,
   cls: MapConstructor | SetConstructor | ObjectConstructor,

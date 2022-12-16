@@ -1,21 +1,21 @@
 /* eslint-disable no-console */
 import {createStore} from 'tinybase/store';
 import {createSync} from './sync';
-import {jsonString} from './common';
 
 const syncFromTo = (syncFrom: any, syncTo: any) => {
   console.log(
     `\nSYNC ${syncFrom.getUniqueStoreId()} to ${syncTo.getUniqueStoreId()}`,
   );
+  console.log('OLD', syncTo.getStore().getTables());
 
   const currentToChanges = syncTo.getChanges();
-  console.log(`REQ ${syncTo.getUniqueStoreId()}`, jsonString(currentToChanges));
+  console.log(`REQ ${syncTo.getUniqueStoreId()}`, currentToChanges);
 
   const nextToChanges = syncFrom.getChanges(currentToChanges);
-  console.log(`RES ${syncFrom.getUniqueStoreId()}`, jsonString(nextToChanges));
+  console.log(`RES ${syncFrom.getUniqueStoreId()}`, nextToChanges);
 
   syncTo.setChanges(nextToChanges);
-  console.log('New contents', syncTo.getStore().getTables());
+  console.log('NEW', syncTo.getStore().getTables());
 };
 
 const store1 = createStore();

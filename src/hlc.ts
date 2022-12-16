@@ -68,16 +68,16 @@ export const getHlcFunctions = (
   let counter = 0;
   const uniqueIdHash = stringHash(uniqueId);
 
-  const getLocalHlc = (): Hlc => {
-    seenRemoteHlc();
+  const getHlc = (): Hlc => {
+    seenHlc();
     return encodeHlc(logicalTime, ++counter, uniqueIdHash);
   };
 
-  const seenRemoteHlc = (remoteHlc?: Hlc): void => {
+  const seenHlc = (hlc?: Hlc): void => {
     const previousLogicalTime = logicalTime;
-    const [remoteLogicalTime, remoteCounter] = isUndefined(remoteHlc)
+    const [remoteLogicalTime, remoteCounter] = isUndefined(hlc)
       ? [0, 0]
-      : decodeHlc(remoteHlc);
+      : decodeHlc(hlc);
 
     logicalTime = Math.max(
       previousLogicalTime,
@@ -94,5 +94,5 @@ export const getHlcFunctions = (
         : -1;
   };
 
-  return [getLocalHlc, seenRemoteHlc];
+  return [getHlc, seenHlc];
 };

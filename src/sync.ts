@@ -9,7 +9,9 @@ import {
   collClear,
   collIsEmpty,
   ifNotUndefined,
+  isObject,
   isUndefined,
+  jsonString,
   mapEnsure,
   mapForEach,
   mapGet,
@@ -20,15 +22,12 @@ import {
 } from './common';
 import {Id} from 'tinybase/common';
 
+export type ChangesMessage = [stringTable: string[], json: string];
+
 const MAX_DEPTH = 7;
 
-export type Change = [
-  tableId: Id,
-  rowId: Id,
-  cellId: Id,
-  cell: CellOrUndefined,
-];
-export type ChangeNode = Map<string, ChangeNode | Change>;
+type Change = [tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined];
+type ChangeNode = Map<string, ChangeNode | Change>;
 
 const addLeaf = (node: ChangeNode, hlc: Hlc, change: Change) =>
   arrayReduce(
@@ -44,7 +43,7 @@ const addLeaf = (node: ChangeNode, hlc: Hlc, change: Change) =>
 
 const getDiff = (
   largerNode: ChangeNode,
-  smallerNode: ChangeNode | undefined,
+  smallerNode: ChangeNode,
   depth = MAX_DEPTH,
   diffNode: ChangeNode = mapNew(),
 ): ChangeNode | undefined => {
@@ -79,13 +78,28 @@ const getLeaves = (
   return leaves;
 };
 
+const encode = (changeNode: ChangeNode | undefined): ChangesMessage => [
+  [],
+  jsonString(changeNode ?? {}),
+];
+
+const decodeChanges = (changes?: ChangesMessage): ChangeNode =>
+  JSON.parse(changes?.[1] ?? '{}', (key, value) => {
+    if (isObject(value)) {
+      const map = mapNew();
+      Object.entries(value).forEach(([k, v]) => mapSet(map, k, v));
+      return map;
+    }
+    return value;
+  });
+
 export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
   let listening = 1;
 
-  const [getLocalHlc, seenRemoteHlc] = getHlcFunctions(uniqueStoreId, offset);
+  const [getHlc, seenHlc] = getHlcFunctions(uniqueStoreId, offset);
 
   const undigestedChanges: Map<Hlc, Change> = mapNew();
-  const allChanges: ChangeNode = mapNew();
+  const rootChangeNode: ChangeNode = mapNew();
   const latestHlcsByCell: IdMap3<Hlc> = mapNew();
 
   const handleChange = (
@@ -117,30 +131,30 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
 
   const digestChanges = () => {
     mapForEach(undigestedChanges, (hlc, change) =>
-      addLeaf(allChanges, hlc, change),
+      addLeaf(rootChangeNode, hlc, change),
     );
     collClear(undigestedChanges);
   };
 
-  const getChanges = (except?: ChangeNode): ChangeNode | undefined => {
+  const getChanges = (except?: ChangesMessage): ChangesMessage => {
     digestChanges();
-    return getDiff(allChanges, except);
+    return encode(getDiff(rootChangeNode, decodeChanges(except)));
   };
 
-  const setChanges = (changes: ChangeNode) => {
+  const setChanges = (changes: ChangesMessage) => {
     digestChanges();
     listening = 0;
-    store.transaction(() => {
+    store.transaction(() =>
       arrayForEach(
-        getLeaves(getDiff(changes, allChanges)),
+        getLeaves(getDiff(decodeChanges(changes), rootChangeNode)),
         ([hlc, [tableId, rowId, cellId, cell]]) => {
-          seenRemoteHlc(hlc);
+          seenHlc(hlc);
           if (handleChange(hlc, tableId, rowId, cellId, cell)) {
             setOrDelCell(store, tableId, rowId, cellId, cell);
           }
         },
-      );
-    });
+      ),
+    );
     listening = 1;
   };
 
@@ -160,7 +174,7 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     null,
     null,
     (_store, tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined) =>
-      listening ? handleChange(getLocalHlc(), tableId, rowId, cellId, cell) : 0,
+      listening ? handleChange(getHlc(), tableId, rowId, cellId, cell) : 0,
   );
 
   return Object.freeze(sync);
