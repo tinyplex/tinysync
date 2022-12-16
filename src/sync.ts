@@ -22,7 +22,7 @@ import {
 } from './common';
 import {Id} from 'tinybase/common';
 
-export type ChangesMessage = [stringTable: string[], json: string];
+export type Changes = string; //[stringTable: string[], json: string];
 
 const MAX_DEPTH = 7;
 
@@ -78,13 +78,15 @@ const getLeaves = (
   return leaves;
 };
 
-const encode = (changeNode: ChangeNode | undefined): ChangesMessage => [
-  [],
-  jsonString(changeNode ?? {}),
-];
+const encode = (changeNode: ChangeNode | undefined): Changes => {
+  if (isUndefined(changeNode)) {
+    return '';
+  }
+  return jsonString(changeNode);
+};
 
-const decodeChanges = (changes?: ChangesMessage): ChangeNode =>
-  JSON.parse(changes?.[1] ?? '{}', (key, value) => {
+const decode = (changes: Changes): ChangeNode =>
+  JSON.parse(changes == '' ? '{}' : changes, (key, value) => {
     if (isObject(value)) {
       const map = mapNew();
       Object.entries(value).forEach(([k, v]) => mapSet(map, k, v));
@@ -136,17 +138,17 @@ export const createSync = (store: Store, uniqueStoreId: Id, offset = 0) => {
     collClear(undigestedChanges);
   };
 
-  const getChanges = (except?: ChangesMessage): ChangesMessage => {
+  const getChanges = (except: Changes = ''): Changes => {
     digestChanges();
-    return encode(getDiff(rootChangeNode, decodeChanges(except)));
+    return encode(getDiff(rootChangeNode, decode(except)));
   };
 
-  const setChanges = (changes: ChangesMessage) => {
+  const setChanges = (changes: Changes) => {
     digestChanges();
     listening = 0;
     store.transaction(() =>
       arrayForEach(
-        getLeaves(getDiff(decodeChanges(changes), rootChangeNode)),
+        getLeaves(getDiff(decode(changes), rootChangeNode)),
         ([hlc, [tableId, rowId, cellId, cell]]) => {
           seenHlc(hlc);
           if (handleChange(hlc, tableId, rowId, cellId, cell)) {
