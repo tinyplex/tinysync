@@ -7,7 +7,7 @@ export type HlcParts = [
   clientHash30: number,
 ];
 export type Hlc = string;
-// Sortable 16 digit radix-64 string of 0-9a-zA-Z{} representing 96 bits:
+// Sortable 16 digit radix-64 string representing 96 bits:
 // - 42 bits (7 chars) for time in milliseconds (~139 years)
 // - 24 bits (4 chars) for counter (~16 million)
 // - 30 bits (5 chars) for hash of unique client id (~1 billion)

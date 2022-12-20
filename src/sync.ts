@@ -4,10 +4,12 @@ import {
   IdMap2,
   IdMap3,
   arrayForEach,
+  arrayMap,
   arrayPush,
   arrayReduce,
   collClear,
   collIsEmpty,
+  collSize,
   ifNotUndefined,
   isObject,
   isUndefined,
@@ -15,28 +17,54 @@ import {
   mapEnsure,
   mapForEach,
   mapGet,
+  mapKeys,
   mapNew,
   mapSet,
   setOrDelCell,
-  stringSplit,
 } from './common';
 import {Id} from 'tinybase/common';
 
 export type Changes = string; //[stringTable: string[], json: string];
 
-const MAX_DEPTH = 7;
+const TREE_DEPTH = 3;
 
 type Change = [tableId: Id, rowId: Id, cellId: Id, cell: CellOrUndefined];
 type ChangeNode = Map<string, ChangeNode | Change>;
 
+const getLookupFunctions = (
+  tokenTables: [Map<string, number>, Map<string, number>] = [
+    mapNew(),
+    mapNew(),
+  ],
+): [
+  (value: string | number | boolean | undefined, safeB64?: 1) => number,
+  () => string[],
+] => {
+  const getTokenTyped = (value, tokenTableId) =>
+    mapEnsure(tokenTables[tokenTableId], value, () =>
+      collSize(tokenTables[tokenTableId]),
+    );
+  return [
+    (value: string | number | boolean | undefined, isB64?: 1) =>
+      getTokenTyped(isB64 ? value : jsonString(value ?? null), isB64 ?? 0),
+    (): string[] =>
+      arrayMap(tokenTables, (tokenTable) => mapKeys(tokenTable).join(',')),
+  ];
+};
+
 const addLeaf = (node: ChangeNode, hlc: Hlc, change: Change) =>
   arrayReduce(
-    stringSplit(hlc, '', MAX_DEPTH).concat(hlc.substring(MAX_DEPTH)),
-    (node, char, index) =>
+    [
+      hlc.substring(0, 3),
+      hlc.substring(3, 7),
+      hlc.substring(7, 11),
+      hlc.substring(11),
+    ],
+    (node, fragment, index) =>
       mapEnsure(
         node,
-        char,
-        index < MAX_DEPTH ? mapNew : () => change,
+        fragment,
+        index < TREE_DEPTH ? mapNew : () => change,
       ) as ChangeNode,
     node,
   );
@@ -44,7 +72,7 @@ const addLeaf = (node: ChangeNode, hlc: Hlc, change: Change) =>
 const getDiff = (
   largerNode: ChangeNode,
   smallerNode: ChangeNode,
-  depth = MAX_DEPTH,
+  depth = TREE_DEPTH,
   diffNode: ChangeNode = mapNew(),
 ): ChangeNode | undefined => {
   mapForEach(largerNode, (key, largerChild) => {
@@ -67,7 +95,7 @@ const getDiff = (
 const getLeaves = (
   node: ChangeNode | undefined,
   leaves: [Hlc, Change][] = [],
-  depth = MAX_DEPTH,
+  depth = TREE_DEPTH,
   path = '',
 ): [Hlc, Change][] => {
   mapForEach(node, (key, child) => {
@@ -82,7 +110,76 @@ const encode = (changeNode: ChangeNode | undefined): Changes => {
   if (isUndefined(changeNode)) {
     return '';
   }
+
+  console.log('\nCompressing...\n');
+  console.dir(changeNode, {depth: null});
+  console.log('\ninto...\n');
+  console.log(encode2(changeNode));
+  console.log('\n');
+  console.log(jsonString(changeNode));
+  console.log('\n');
+
   return jsonString(changeNode);
+};
+
+const encode2 = (
+  node: ChangeNode | undefined,
+  encoding: (string | number)[] = [],
+  lookupFunctions = getLookupFunctions(),
+  depth = TREE_DEPTH,
+): Changes => {
+  mapForEach(node, (key, child) => {
+    arrayPush(encoding, String.fromCharCode(depth + 33));
+    arrayPush(encoding, lookupFunctions[0](key, 1));
+    depth
+      ? encode2(child as ChangeNode, encoding, lookupFunctions, depth - 1)
+      : arrayPush(
+          encoding,
+          ...arrayMap(
+            child as Change,
+            (changePart) => `,${lookupFunctions[0](changePart)}`,
+          ),
+        );
+  });
+  return [...lookupFunctions[1](), encoding.join('')].join('\n');
+};
+
+const DEPTH_REGEX = arrayMap(
+  ['!', '"', '#', '\\$'],
+  (sep, s) => new RegExp(`${sep}(\\d+)${s == 0 ? ',' : ''}([^${sep}]+)`, 'g'),
+);
+
+const decode2 = (changes: Changes): ChangeNode => {
+  if (changes == '') {
+    return mapNew();
+  }
+  const [lookupTableString, lookupTableB64String, tree] = changes.split('\n');
+  const lookupTable = arrayMap(lookupTableString.split(','), (value) =>
+    JSON.parse(value),
+  );
+  const lookupTableB64 = lookupTableB64String.split(',');
+  const parseNode = (
+    string: string,
+    depth = TREE_DEPTH,
+    node: ChangeNode = mapNew(),
+  ): ChangeNode => {
+    arrayForEach(
+      [...string.matchAll(DEPTH_REGEX[depth])],
+      ([, key, childString]) =>
+        mapSet(
+          node,
+          lookupTableB64[key],
+          depth
+            ? parseNode(childString, depth - 1)
+            : arrayMap(
+                childString.split(','),
+                (changePart) => lookupTable[changePart] ?? undefined,
+              ),
+        ),
+    );
+    return node;
+  };
+  return parseNode(tree);
 };
 
 const decode = (changes: Changes): ChangeNode =>
