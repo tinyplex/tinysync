@@ -24,8 +24,7 @@ store1.setCell('pets', 'roger', 'species', 'cat');
 
 const store2 = createStore();
 const sync2 = createSync(store2, 'store2');
-store2.setCell('pets', 'roger', 'color', 'brown');
-store2.setCell('pets', 'roger', 'price', 3);
+store2.setRow('pets', 'roger', {color: 'brown', price: 3});
 
 syncFromTo(sync1, sync2);
 syncFromTo(sync2, sync1);
